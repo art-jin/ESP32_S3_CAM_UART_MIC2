@@ -1,0 +1,12 @@
+{
+    "target": "esp32s3",
+    "builds": [
+        {
+            "name": "waveshare-s3-cam",
+            "sdkconfig_append": [
+                "CONFIG_CAMERA_OV5640=y",
+                "CONFIG_CAMERA_OV5640_AUTO_DETECT_DVP_INTERFACE_SENSOR=y"
+            ]
+        }
+    ]
+}
