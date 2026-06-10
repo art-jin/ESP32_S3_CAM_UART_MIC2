@@ -5,13 +5,19 @@
 #include <freertos/semphr.h>
 #include <stdint.h>
 #include <cstddef>
+#include <functional>
 
 class StsServo;
 class Camera;
 
 class DoaTracker {
 public:
-    DoaTracker(StsServo* servo, Camera* camera);
+    DoaTracker(StsServo* servo, Camera* camera,
+               std::function<float(int16_t)> pos_to_deg = nullptr,
+               std::function<uint16_t(float)> deg_to_pos = nullptr,
+               float angle_min = 10.0f,
+               float angle_max = 170.0f,
+               float center_deg = 90.0f);
     ~DoaTracker();
 
     void Start();
@@ -42,12 +48,19 @@ private:
     StsServo* servo_;
     Camera* camera_;
 
+    // Injectable angle conversion (board-specific gear ratio)
+    std::function<float(int16_t)> pos_to_deg_;
+    std::function<uint16_t(float)> deg_to_pos_;
+    float center_deg_;
+    float angle_min_;
+    float angle_max_;
+
     RingbufHandle_t ring_buf_ = nullptr;
 
     // FreeRTOS task
     TaskHandle_t task_ = nullptr;
     volatile bool running_ = false;
-    float current_angle_ = 90.0f;
+    float current_angle_ = 0.0f;
 
     // GCC-PHAT buffers (allocated in Start)
     float last_max_val_ = 0;
@@ -108,8 +121,6 @@ private:
     static constexpr float SAMPLE_RATE = 24000.0f;
     static constexpr float SMOOTH_ALPHA = 0.8f;
     static constexpr int DEAD_ZONE_DEG = 3;
-    static constexpr float ANGLE_MIN = 10.0f;
-    static constexpr float ANGLE_MAX = 170.0f;
     static constexpr int CONVERGE_COUNT = 2;
     static constexpr float MIN_CORRELATION = 0.20f;  // lower threshold — 4cm spacing produces weaker peaks
     static constexpr int UPDATE_INTERVAL = 5;

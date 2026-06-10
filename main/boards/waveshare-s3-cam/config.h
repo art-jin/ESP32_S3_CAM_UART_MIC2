@@ -57,6 +57,33 @@
 #define SERVO_CENTER_POS   2047
 #define SERVO_MAX_POS      4095
 
+// Gear mechanism: 16-tooth driving gear on servo shaft → 92-tooth ring gear on platform
+#define SERVO_GEAR_RATIO               5.75f     // 92 / 16
+#define SERVO_FULL_RANGE_DEG           360.0f    // STS3215: 0-4095 = 0-360° shaft rotation
+
+// Platform angle convention: 0° = center, positive = clockwise, range ≈ ±31.3°
+#define PLATFORM_FULL_RANGE_DEG        (SERVO_FULL_RANGE_DEG / SERVO_GEAR_RATIO)  // 62.609°
+#define PLATFORM_ANGLE_MIN             (-30.0f)  // safety margin from -31.3° physical limit
+#define PLATFORM_ANGLE_MAX             ( 30.0f)  // safety margin from +31.3° physical limit
+
+static inline float PlatformDegFromPos(int16_t servo_pos) {
+    return (float)(servo_pos - SERVO_CENTER_POS) * PLATFORM_FULL_RANGE_DEG / (float)SERVO_MAX_POS;
+}
+
+static inline uint16_t PosFromPlatformDeg(float platform_deg) {
+    float offset = platform_deg * (float)SERVO_MAX_POS / PLATFORM_FULL_RANGE_DEG;
+    int32_t pos = SERVO_CENTER_POS + (int32_t)(offset >= 0 ? offset + 0.5f : offset - 0.5f);
+    if (pos < 0) pos = 0;
+    if (pos > SERVO_MAX_POS) pos = SERVO_MAX_POS;
+    return (uint16_t)pos;
+}
+
+static inline float ClampPlatformAngle(float deg) {
+    if (deg < PLATFORM_ANGLE_MIN) deg = PLATFORM_ANGLE_MIN;
+    if (deg > PLATFORM_ANGLE_MAX) deg = PLATFORM_ANGLE_MAX;
+    return deg;
+}
+
 // 2inch Capacitive Touch LCD via SPI (FPC connector J12)
 #define DISPLAY_SPI_HOST      SPI2_HOST
 #define DISPLAY_MOSI_PIN      GPIO_NUM_1

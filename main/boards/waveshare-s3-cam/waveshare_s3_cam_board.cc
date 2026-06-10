@@ -410,7 +410,10 @@ private:
         }
 
         if (servo_) {
-            doa_tracker_ = new DoaTracker(servo_, camera_);
+            doa_tracker_ = new DoaTracker(servo_, camera_,
+                [](int16_t pos) -> float { return PlatformDegFromPos(pos); },
+                [](float deg) -> uint16_t { return PosFromPlatformDeg(deg); },
+                PLATFORM_ANGLE_MIN, PLATFORM_ANGLE_MAX, 0.0f);
 
             mcp_server.AddTool("self.sound_tracking.start",
                 "启动声源追踪，通过双麦克风定位声源方向并转动舵机",
@@ -429,29 +432,29 @@ private:
             });
 
             mcp_server.AddTool("self.servo.turn_left",
-                "舵机向左转10度",
+                "舵机向左转5度",
                 PropertyList(), [this](const PropertyList&) -> ReturnValue {
                 if (!servo_) return false;
                 int16_t pos = servo_->ReadPosition(SERVO_ID);
                 if (pos < 0) return false;
-                float deg = (float)pos / 4095.0f * 180.0f;
-                deg -= 10.0f;
-                if (deg < 0) deg = 0;
-                uint16_t new_pos = (uint16_t)(deg / 180.0f * 4095);
+                float deg = PlatformDegFromPos(pos);
+                deg -= 5.0f;
+                deg = ClampPlatformAngle(deg);
+                uint16_t new_pos = PosFromPlatformDeg(deg);
                 servo_->WritePosEx(SERVO_ID, new_pos, 500, 10);
                 return true;
             });
 
             mcp_server.AddTool("self.servo.turn_right",
-                "舵机向右转10度",
+                "舵机向右转5度",
                 PropertyList(), [this](const PropertyList&) -> ReturnValue {
                 if (!servo_) return false;
                 int16_t pos = servo_->ReadPosition(SERVO_ID);
                 if (pos < 0) return false;
-                float deg = (float)pos / 4095.0f * 180.0f;
-                deg += 10.0f;
-                if (deg > 180) deg = 180;
-                uint16_t new_pos = (uint16_t)(deg / 180.0f * 4095);
+                float deg = PlatformDegFromPos(pos);
+                deg += 5.0f;
+                deg = ClampPlatformAngle(deg);
+                uint16_t new_pos = PosFromPlatformDeg(deg);
                 servo_->WritePosEx(SERVO_ID, new_pos, 500, 10);
                 return true;
             });
@@ -463,25 +466,21 @@ private:
     void ShakeHead() {
         if (!servo_) return;
 
-        auto angleToPos = [](float angle) -> uint16_t {
-            return (uint16_t)(angle / 180.0f * SERVO_MAX_POS);
-        };
-
-        ESP_LOGI(TAG, "Shake head: sweeping 0->180->90");
-        servo_->WritePosEx(SERVO_ID, angleToPos(0), 2000, 50);
-        vTaskDelay(pdMS_TO_TICKS(1000));
-        servo_->WritePosEx(SERVO_ID, angleToPos(180), 2000, 50);
-        vTaskDelay(pdMS_TO_TICKS(1000));
-        servo_->WritePosEx(SERVO_ID, angleToPos(90), 2000, 50);
-        vTaskDelay(pdMS_TO_TICKS(500));
+        ESP_LOGI(TAG, "Shake head: sweeping -25->+25->0 then oscillate");
+        servo_->WritePosEx(SERVO_ID, PosFromPlatformDeg(-25.0f), 2000, 50);
+        vTaskDelay(pdMS_TO_TICKS(800));
+        servo_->WritePosEx(SERVO_ID, PosFromPlatformDeg(25.0f), 2000, 50);
+        vTaskDelay(pdMS_TO_TICKS(800));
+        servo_->WritePosEx(SERVO_ID, PosFromPlatformDeg(0.0f), 2000, 50);
+        vTaskDelay(pdMS_TO_TICKS(400));
 
         for (int i = 0; i < 3; i++) {
-            servo_->WritePosEx(SERVO_ID, angleToPos(75), 1500, 30);
-            vTaskDelay(pdMS_TO_TICKS(300));
-            servo_->WritePosEx(SERVO_ID, angleToPos(105), 1500, 30);
-            vTaskDelay(pdMS_TO_TICKS(300));
+            servo_->WritePosEx(SERVO_ID, PosFromPlatformDeg(-15.0f), 1500, 30);
+            vTaskDelay(pdMS_TO_TICKS(250));
+            servo_->WritePosEx(SERVO_ID, PosFromPlatformDeg(15.0f), 1500, 30);
+            vTaskDelay(pdMS_TO_TICKS(250));
         }
-        servo_->WritePosEx(SERVO_ID, angleToPos(90), 1000, 30);
+        servo_->WritePosEx(SERVO_ID, PosFromPlatformDeg(0.0f), 1000, 30);
     }
 
 public:

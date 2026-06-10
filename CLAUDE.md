@@ -29,7 +29,7 @@ Based on XiaoZhi V2.1.0 codebase (`reference/XiaoZhiCode_V2.1.0/` was copied to 
    - I2S: MCLK=GPIO10, BCLK=GPIO11, WS=GPIO12, DIN=GPIO13, DOUT=GPIO14
    - Audio: ES8311 (speaker DAC, I2C addr 0x00) + ES7210 (mic ADC, 4-ch TDM, I2C addr 0x40)
    - Camera: OV5640 via DVP (XCLK=GPIO38 permanent, PCLK=41, VSYNC=17, HREF=18, D0-D7)
-   - Servo: STS3215 serial bus servo via UART1 (GPIO43 TX, GPIO44 RX) + Bus Servo Adapter A
+   - Servo: STS3215 360° serial bus servo via UART1 (GPIO43 TX, GPIO44 RX) + Bus Servo Adapter A, geared to 92-tooth ring gear via 16-tooth driving gear (5.75:1 ratio), platform range ±30°
    - LCD: 2inch ST7789 via SPI2 (MOSI=GPIO1, CLK=GPIO5, CS=GPIO6, DC=GPIO3), reset+backlight via CH32V003 IO expander (I2C addr 0x24)
    - Console: USB Serial JTAG (frees UART0 GPIO43/44 for servo)
 
@@ -43,6 +43,7 @@ Based on XiaoZhi V2.1.0 codebase (`reference/XiaoZhiCode_V2.1.0/` was copied to 
    - MCP tools: `self.sound_tracking.start`, `self.sound_tracking.stop`
    - Auto-stop after 30s of no valid detection
    - DOA task runs on Core 0 at priority 4 (same as audio output; audio input at priority 8 preempts it)
+   - Angle conversion injected via `std::function` (board-specific gear ratio), platform degrees centered at 0°
 
 4. **LCD display with GIF emoji** (`main/boards/waveshare-s3-cam/waveshare_emoji_display.h/.cc`)
    - `WaveshareEmojiDisplay` extends `SpiLcdDisplay`, registers 6 animated GIF emojis via `EmojiCollection`
@@ -92,7 +93,7 @@ ES7210 outputs 4 TDM slots. The mapping between physical inputs and TDM slots:
 
 - "请看我" → `self.sound_tracking.start` → DOA + servo + camera capture → AI vision analysis
 - "停止看我" → `self.sound_tracking.stop` → stop DOA, servo to center
-- "摇摇头" → `self.servo.shake_head` → servo ±15° × 3
+- "摇摇头" → `self.servo.shake_head` → platform sweep ±25° + oscillation ±15° × 3
 
 ## DOA Tracker Tuning Parameters
 
@@ -108,9 +109,19 @@ ES7210 outputs 4 TDM slots. The mapping between physical inputs and TDM slots:
 | SERVO_MIN_INTERVAL_MS | 200 | Minimum interval between servo moves |
 | AUTO_STOP_FRAMES | 900 | Auto-stop after ~30s no valid detection |
 
+## Servo Gear Mechanism
+
+STS3215 360° servo drives a 16-tooth gear (driving) meshing with 92-tooth ring gear (platform):
+- Gear ratio: 92/16 = 5.75 (servo turns 5.75° per 1° platform rotation)
+- Servo position 0-4095 = 0-360° shaft = 0-62.6° platform
+- Platform center (position 2047) = 0° platform angle
+- Platform range: approximately -31.3° to +31.3°, safety-limited to ±30°
+- All application-layer angles are "platform degrees" (center=0°)
+- Conversion functions in `config.h`: `PlatformDegFromPos()`, `PosFromPlatformDeg()`, `ClampPlatformAngle()`
+
 ## Key Files
 
-- `main/boards/waveshare-s3-cam/config.h` — Pin definitions, LCD params
+- `main/boards/waveshare-s3-cam/config.h` — Pin definitions, LCD params, servo gear ratio + platform angle conversion
 - `main/boards/waveshare-s3-cam/waveshare_s3_cam_board.cc` — Board initialization, MCP tools, DOA overlay
 - `main/boards/waveshare-s3-cam/waveshare_emoji_display.h/.cc` — GIF emoji display class
 - `main/boards/common/sts_servo.h/.cc` — STS3215 serial bus servo driver (UART)

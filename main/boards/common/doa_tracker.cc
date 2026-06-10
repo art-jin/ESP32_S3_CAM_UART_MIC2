@@ -14,8 +14,14 @@
 DoaTracker* DoaTracker::instance_ = nullptr;
 SemaphoreHandle_t DoaTracker::instance_mutex_ = nullptr;
 
-DoaTracker::DoaTracker(StsServo* servo, Camera* camera)
-    : servo_(servo), camera_(camera) {
+DoaTracker::DoaTracker(StsServo* servo, Camera* camera,
+                       std::function<float(int16_t)> pos_to_deg,
+                       std::function<uint16_t(float)> deg_to_pos,
+                       float angle_min, float angle_max, float center_deg)
+    : servo_(servo), camera_(camera),
+      pos_to_deg_(pos_to_deg), deg_to_pos_(deg_to_pos),
+      center_deg_(center_deg), angle_min_(angle_min), angle_max_(angle_max) {
+    current_angle_ = center_deg_;
     instance_mutex_ = xSemaphoreCreateMutex();
 }
 
@@ -415,17 +421,17 @@ void DoaTracker::UpdateServo(float angle_offset) {
 
     int16_t pos_raw = servo_->ReadPosition(1);
     if (pos_raw < 0) return;
-    float current_deg = (float)pos_raw / 4095.0f * 180.0f;
+    float current_deg = pos_to_deg_ ? pos_to_deg_(pos_raw) : (float)pos_raw / 4095.0f * 180.0f;
 
     float target_deg = current_deg + SMOOTH_ALPHA * angle_offset;
-    if (target_deg < ANGLE_MIN) target_deg = ANGLE_MIN;
-    if (target_deg > ANGLE_MAX) target_deg = ANGLE_MAX;
+    if (target_deg < angle_min_) target_deg = angle_min_;
+    if (target_deg > angle_max_) target_deg = angle_max_;
 
     if (fabsf(target_deg - current_deg) < DEAD_ZONE_DEG) return;
 
     last_servo_ms = now;
     current_angle_ = target_deg;
-    uint16_t pos = (uint16_t)(target_deg / 180.0f * 4095);
+    uint16_t pos = deg_to_pos_ ? deg_to_pos_(target_deg) : (uint16_t)(target_deg / 180.0f * 4095);
     servo_->WritePosEx(1, pos, 500, 10);
 
     ESP_LOGD(TAG, "Servo: cur=%.1f off=%.1f -> %.1f", current_deg, angle_offset, target_deg);
@@ -433,6 +439,7 @@ void DoaTracker::UpdateServo(float angle_offset) {
 
 void DoaTracker::ServoToCenter() {
     if (!servo_) return;
-    current_angle_ = 90.0f;
-    servo_->WritePosEx(1, 2047, 1000, 20);
+    current_angle_ = center_deg_;
+    uint16_t center_pos = deg_to_pos_ ? deg_to_pos_(center_deg_) : 2047;
+    servo_->WritePosEx(1, center_pos, 1000, 20);
 }
